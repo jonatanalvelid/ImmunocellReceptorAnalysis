@@ -16,7 +16,7 @@ from densitymap import densitymap
 
 #def main():
 #"""Does the main job."""
-dirpath = 'T:/Jonatan/Collaborations/Immunoreceptors - Trixy (KI)/RedSTED Data/2020-02-27/To share - tif'
+dirpath = 'X:/Jonatan/Collaborations/Immunoreceptors - Trixy (KI)/RedSTED Data/2020-02-27/To share - tif'
 
 filepath = os.path.join(dirpath, 'C-Cell010.tif')
 
