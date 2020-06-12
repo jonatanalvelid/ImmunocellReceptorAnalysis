@@ -5,7 +5,7 @@
 # ## Nearest neighbor analysis
 # 
 # Find the nearest neighbors of the detected PD-1 peaks.
-# Use k=10 and compare the different samples.
+# Use k=4 and compare the different samples.
 # 
 # @author: jonatan.alvelid
 # Copied jupyter code: 2020-05-28
@@ -29,17 +29,20 @@ from binarycellmap import binary_cell_map
 
 # Define parameter constants
 allimgs = True  # parameter to check if you want to loop through all imgs or just analyse one
-dirpath = askdirectory(title='Choose your folder...',initialdir='E:/PhD/Data analysis/Immunoreceptors - temp copy/RedSTED Data/2020-02-27')  # directory path
+dirpath = askdirectory(title='Choose your folder...',initialdir='E:/PhD/Data analysis/Immunoreceptors - temp copy/RedSTED Data/2020-03-27')  # directory path
 print(dirpath)
 difgaus_sigmahi_nm = 100  # difference of gaussians high_sigma in nm
 sm_size_nm = 15  # smoothing Gaussian size in nm
-peakthresh = 2.5  # absolute intensity threshold for peak detection
+standbool = False  # boolean for if you want to standardize images or not
+multfact = 200  # multiplicative factor instead of standardization
+peakthresh_stand_true = 2.5 # absolute intensity threshold for peak detection (standardized)
+peakthresh_stand_false = 4.6 # absolute intensity threshold for peak detection (non-stand)
 minpeakdist = 1  # minimum distance between peaks in pixels for peak detection - CONSIDER CHANGING THIS TO NM? OR not, since the detection of p2p distances depends on the pixel size.
 k_nn = 4  # k for nearest neighbor analysis
 samples = ['A','B','C']  # sample names
 dist_all = [[],[],[]]  # all lists for the three samples as a nested list
 histrange = 800  # range of the distance for the histogram of NN-distances
-histbins = 30  # number of bins for the histogram of NN-distances
+histbins = round(800/25)  # number of bins for the histogram of NN-distances
 
 if allimgs:
     files = glob.glob(os.path.join(dirpath,'*[0-9].tif'))
@@ -69,10 +72,16 @@ for filepath in files:
     # gaussian smoothing of the image
     img = ndi.gaussian_filter(img, sm_size_nm/pxs_nm)
 
-    # Standardize the image by dividing by a factor of mean+std, to standardize all images to ~the same range of values (assuming the intensity distribution is similar)
-    imgmean = np.ma.masked_array(img,~binarymap).mean()
-    imgstd = np.ma.masked_array(img,~binarymap).std()
-    img = np.array(img/(imgmean+imgstd))
+    # If necessary: standardize image by dividing by mean+std, to get all images to ~the same range of values (assuming similar intensity distr)
+    # Else: multiply by a fix factor to get values to roughly the same range
+    if standbool:
+        peakthresh = peakthresh_stand_true
+        imgmean = np.ma.masked_array(img,~binarymap).mean()
+        imgstd = np.ma.masked_array(img,~binarymap).std()
+        img = np.array(img/(imgmean+imgstd))
+    else:
+        peakthresh = peakthresh_stand_false
+        img = img * multfact
 
     # Get the coordinates of the peaks in the pre-processed image
     coords_peaks = find_maxima(img, thresh_abs=peakthresh, min_dist=minpeakdist)
@@ -82,6 +91,16 @@ for filepath in files:
     distances, indices = nbrs.kneighbors(coords_peaks)
     dist_all[samples.index(imgname[0])].extend(distances[:,1:].flatten()*pxs_nm)
 
+    # Plot detected receptors map and save
+    fig = plt.figure(figsize = (15,15), frameon=False)
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.axis('off')
+    imgplot0=plt.imshow(imgraw, interpolation='none', cmap=plt.cm.hot)
+    plt.plot(coords_peaks[:, 1], coords_peaks[:, 0], 'g.', markersize=6)
+    detrecname = imgname+'_detrec.tif'
+    save_path_detcor = os.path.join(dirpath, detrecname)
+    fig.savefig(save_path_detcor, transparent=True, pad_inches=0)
+    plt.close(fig)
 
     # Save binary cell map to tiff-file
     bincelname = imgname+'_cellmask.tif'
@@ -105,15 +124,12 @@ for filepath in files:
         file.write(json.dumps(analysis_dict))
 
 # Plot histogram of nearest neighbors for all three samples
-(na, binsa, patchesa) = plt.hist(dist_all[0], bins=histbins, range=(0,histrange), density=True, rwidth=0.3, align='mid')
-(nb, binsb, patchesb) = plt.hist(dist_all[1], bins=histbins, range=(0,histrange), density=True, rwidth=0.3, align='mid')
-(nc, binsc, patchesc) = plt.hist(dist_all[2], bins=histbins, range=(0,histrange), density=True, rwidth=0.3, align='mid')
-fig = plt.figure(figsize = (15,10), frameon=False)
-plt.hist(np.array(dist_all[0])-histrange/histbins/4, bins=binsa-histrange/histbins/4, range=(0,histrange), density=True, rwidth=0.22, align='mid')
-plt.hist(dist_all[1], bins=binsb, range=(0,800), density=True, rwidth=0.22, align='mid')
-plt.hist(np.array(dist_all[2])+histrange/histbins/4, bins=binsc+histrange/histbins/4, range=(0,histrange), density=True, rwidth=0.22, align='mid')
-plt.legend(samples,fontsize='xx-large')
+fig = plt.figure(figsize = (7,5), frameon=False)
+plt.hist([dist_all[0], dist_all[1], dist_all[2]], bins=histbins, range=(0,histrange), density=True, rwidth=0.9, align='mid', label=samples)
+plt.legend(fontsize='xx-large', loc='upper right')
 plt.xlim(0, histrange)
+plt.xlabel('Neighbor distance [nm]')
+plt.ylabel('Relative frequency [arb.u.]')
 plt.show()
 
 # Perform KS-tests on the CDFs for the three samples
@@ -130,6 +146,26 @@ ks_bc = stats.ks_2samp(dist_all[1],dist_all[2]).pvalue
 # Save histogram to tiff-file
 save_path_denmap = os.path.join(dirpath, "NN-histogram.svg")
 fig.savefig(save_path_denmap, format='svg')
+
+# Plot CDF and save to tiff-file
+CDFbins = int(histrange/0.1)  # number of bins for the histogram of NN-distances
+fig = plt.figure(figsize = (7,5), frameon=False)
+n = plt.hist([dist_all[0], dist_all[1], dist_all[2]], bins=CDFbins, density=True, histtype='step', cumulative=True, label=samples)
+plt.legend(fontsize='xx-large', loc='lower right')
+plt.xlim(0, histrange)
+plt.xlabel('Neighbor distance [nm]')
+plt.ylabel('Cumulative probability [arb.u.]')
+plt.show()
+
+save_path_denmap = os.path.join(dirpath, "NN-CDF.svg")
+fig.savefig(save_path_denmap, format='svg')
+
+# Save all cluster sizes to txt-files (one per sample)
+for sample in samples:
+    with open(os.path.join(dirpath, "nndists_%s.txt" % sample),'w') as file:
+        for item in dist_all[samples.index(sample)]:
+            file.write("%s\n" % item)
+        file.close()
 
 # Save KS-test results and total info to file
 param_dict = {
@@ -154,6 +190,8 @@ with open(os.path.join(dirpath, "analysis_results_NN.txt"),'w') as file:
 param_dict = {
     "High_sigma in difference of Gaussians (nm)": difgaus_sigmahi_nm,
     "Gaussian smoothing size (nm)": sm_size_nm,
+    "Standardized images": standbool,
+    "Multiplicative factor (instead of standardization)": multfact,
     "Absolute intensity peak detection threshold (cnts)": peakthresh,
     "Minimum peak distance (pxs)": minpeakdist,
     "K nearest neighbors": k_nn

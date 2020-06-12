@@ -6,7 +6,6 @@ def binary_cell_map(img, gaussstd_nm=100, pxs_nm=25, num_di=12, num_er=5):
     """Get a binary map of the cell, from the PD-1 image."""
     # gaussian smoothing of the image
     gaussstd_nm = 100  # bandwidth in nm
-    pxs_nm = 30  # pixel size in nm
     gaussstd = gaussstd_nm/pxs_nm
     img = ndi.gaussian_filter(img, gaussstd)
     binary = img > skfilt.threshold_li(img)

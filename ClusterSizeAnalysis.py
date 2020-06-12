@@ -29,17 +29,20 @@ from clustersize import cluster_size
 
 # Define parameter constants
 allimgs = True  # parameter to check if you want to loop through all imgs or just analyse one
-dirpath = askdirectory(title='Choose your folder...',initialdir='E:/PhD/Data analysis/Immunoreceptors - temp copy/RedSTED Data/2020-02-27')  # directory path
+dirpath = askdirectory(title='Choose your folder...',initialdir='E:/PhD/Data analysis/Immunoreceptors - temp copy/RedSTED Data/2020-03-27')  # directory path
 print(dirpath)
 difgaus_sigmahi_nm = 100  # difference of gaussians high_sigma in nm
 sm_size_nm = 15  # smoothing Gaussian size in nm
-peakthresh = 2.5  # absolute intensity threshold for peak detection
+standbool = False  # boolean for if you want to standardize images or not
+multfact = 200  # multiplicative factor instead of standardization
+peakthresh_stand_true = 2.5 # absolute intensity threshold for peak detection (standardized)
+peakthresh_stand_false = 4.6 # absolute intensity threshold for peak detection (non-stand)
 minpeakdist = 1  # minimum distance between peaks in pixels for peak detection - CONSIDER CHANGING THIS TO NM? OR not, since the detection of p2p distances depends on the pixel size.
 fittol = 0.9  # tolerance r_square value for the Lorentzian fits
 samples = ['A','B','C']  # sample names
 fwhms_all = [[],[],[]]  # all lists for the three samples as a nested list
 histrange = 200  # range of the cluster sizes for the histogram of cluster sizes
-histbins = int(histrange/10)  # number of bins for the histogram of cluster sizes
+histbins = int(histrange/15)  # number of bins for the histogram of cluster sizes
 
 if allimgs:
     files = glob.glob(os.path.join(dirpath,'*[0-9].tif'))
@@ -69,10 +72,16 @@ for filepath in files:
     # gaussian smoothing of the image
     img = ndi.gaussian_filter(img, sm_size_nm/pxs_nm)
 
-    # Standardize the image by dividing by a factor of mean+std, to standardize all images to ~the same range of values (assuming the intensity distribution is similar)
-    imgmean = np.ma.masked_array(img,~binarymap).mean()
-    imgstd = np.ma.masked_array(img,~binarymap).std()
-    img = np.array(img/(imgmean+imgstd))
+    # If necessary: standardize image by dividing by mean+std, to get all images to ~the same range of values (assuming similar intensity distr)
+    # Else: multiply by a fix factor to get values to roughly the same range
+    if standbool:
+        peakthresh = peakthresh_stand_true
+        imgmean = np.ma.masked_array(img,~binarymap).mean()
+        imgstd = np.ma.masked_array(img,~binarymap).std()
+        img = np.array(img/(imgmean+imgstd))
+    else:
+        peakthresh = peakthresh_stand_false
+        img = img * multfact
 
     # Get the coordinates of the peaks in the pre-processed image
     coords_peaks = find_maxima(img, thresh_abs=peakthresh, min_dist=minpeakdist)
@@ -111,12 +120,21 @@ for filepath in files:
         file.write(json.dumps(analysis_dict))
         file.close()
 
+    # Save all FWHMs to txt-files (one per cell)
+    fwhmsname = imgname+'_fwhms.txt'
+    with open(os.path.join(dirpath, fwhmsname),'w') as file:
+        for item in fwhms:
+            file.write("%s\n" % item)
+        file.close()
+
 # Plot histogram of cluster sizes for all three samples
-fig = plt.figure(figsize = (15,10), frameon=False)
+fig = plt.figure(figsize = (7,5), frameon=False)
 #plt.hist([fwhms_all[0], fwhms_all[1], fwhms_all[2], fwhms_all[0]+fwhms_all[1]+fwhms_all[2]], bins=histbins, range=(0,histrange), density=True, rwidth=0.9, align='mid')
-plt.hist([fwhms_all[0], fwhms_all[1], fwhms_all[2]], bins=histbins, range=(0,histrange), density=True, rwidth=0.9, align='mid')
-plt.legend(samples,fontsize='xx-large')
+plt.hist([fwhms_all[0], fwhms_all[1], fwhms_all[2]], bins=histbins, range=(0,histrange), density=True, rwidth=0.9, align='mid', label=samples)
+plt.legend(fontsize='xx-large', loc='upper right')
 plt.xlim(0, histrange)
+plt.xlabel('Cluster FWHM [nm]')
+plt.ylabel('Relative frequency [arb.u.]')
 plt.show()
 
 # Perform KS-tests on the CDFs for the three samples
@@ -134,7 +152,7 @@ ks_bc = stats.ks_2samp(fwhms_all[1],fwhms_all[2]).pvalue
 save_path_denmap = os.path.join(dirpath, "CS-histogram.svg")
 fig.savefig(save_path_denmap, format='svg')
 
-# Save all FWHMs to txt-files (one per sample) (HAVEN'T TESTED THIS YET, TEST IT!)
+# Save all FWHMs to txt-files (one per sample)
 for sample in samples:
     with open(os.path.join(dirpath, "fwhms_%s.txt" % sample),'w') as file:
         for item in fwhms_all[samples.index(sample)]:
@@ -164,6 +182,8 @@ with open(os.path.join(dirpath, "analysis_results_CS.txt"),'w') as file:
 param_dict = {
     "High_sigma in difference of Gaussians (nm)": difgaus_sigmahi_nm,
     "Gaussian smoothing size (nm)": sm_size_nm,
+    "Standardized images": standbool,
+    "Multiplicative factor (instead of standardization)": multfact,
     "Absolute intensity peak detection threshold (cnts)": peakthresh,
     "Minimum peak distance (pxs)": minpeakdist,
     "Fit tolerance for Lorentzian fitting": fittol

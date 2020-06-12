@@ -25,12 +25,15 @@ from findmaxima import find_maxima
 from binarycellmap import binary_cell_map
 
 # Define parameter constants
-allimgs = False  # parameter to check if you want to loop through all imgs or just analyse one
-dirpath = askdirectory(title='Choose your folder...',initialdir='E:/PhD/Data analysis/Immunoreceptors - temp copy/RedSTED Data/2020-02-27')  # directory path
+allimgs = True  # parameter to check if you want to loop through all imgs or just analyse one
+dirpath = askdirectory(title='Choose your folder...',initialdir='E:/PhD/Data analysis/Immunoreceptors - temp copy/RedSTED Data/2020-03-27')  # directory path
 print(dirpath)
 difgaus_sigmahi_nm = 100  # difference of gaussians high_sigma in nm
 sm_size_nm = 15  # smoothing Gaussian size in nm
-peakthresh = 2.5  # absolute intensity threshold for peak detection
+standbool = False  # boolean for if you want to standardize images or not
+multfact = 200  # multiplicative factor instead of standardization
+peakthresh_stand_true = 2.5 # absolute intensity threshold for peak detection (standardized)
+peakthresh_stand_false = 4.6 # absolute intensity threshold for peak detection (non-stand)
 minpeakdist = 1  # minimum distance between peaks in pixels for peak detection - CONSIDER CHANGING THIS TO NM?
 bandwidth_nm = 200  # bandwidth in nm for density map of peaks
 
@@ -38,7 +41,7 @@ if allimgs:
     files = glob.glob(os.path.join(dirpath,'*[0-9].tif'))
     
 else:
-    files = [os.path.join(dirpath,'C-Cell012.tif')]
+    files = [os.path.join(dirpath,'C-Cell002.tif')]
 
 print([path.replace(dirpath+'\\','') for path in files])
 
@@ -62,10 +65,16 @@ for filepath in files:
     # gaussian smoothing of the image
     img = ndi.gaussian_filter(img, sm_size_nm/pxs_nm)
 
-    # Standardize the image by dividing by a factor of mean+std, to standardize all images to ~the same range of values (assuming the intensity distribution is similar)
-    imgmean = np.ma.masked_array(img,~binarymap).mean()
-    imgstd = np.ma.masked_array(img,~binarymap).std()
-    img = np.array(img/(imgmean+imgstd))
+    # If necessary: standardize image by dividing by mean+std, to get all images to ~the same range of values (assuming similar intensity distr)
+    # Else: multiply by a fix factor to get values to roughly the same range
+    if standbool:
+        peakthresh = peakthresh_stand_true
+        imgmean = np.ma.masked_array(img,~binarymap).mean()
+        imgstd = np.ma.masked_array(img,~binarymap).std()
+        img = np.array(img/(imgmean+imgstd))
+    else:
+        peakthresh = peakthresh_stand_false
+        img = img * multfact
 
     # Get the coordinates of the peaks in the pre-processed image
     coords_peaks = find_maxima(img, thresh_abs=peakthresh, min_dist=minpeakdist)
@@ -123,6 +132,8 @@ for filepath in files:
 param_dict = {
     "High_sigma in difference of Gaussians (nm)": difgaus_sigmahi_nm,
     "Gaussian smoothing size (nm)": sm_size_nm,
+    "Standardized images": standbool,
+    "Multiplicative factor (instead of standardization)": multfact,
     "Absolute intensity peak detection threshold (cnts)": peakthresh,
     "Minimum peak distance (pxs)": minpeakdist,
     "Bandwidth for density map of peaks (nm)": bandwidth_nm
