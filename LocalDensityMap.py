@@ -13,12 +13,12 @@
 import os
 import glob
 import json
+from tkinter.filedialog import askdirectory
 import tifffile
 import numpy as np
 import matplotlib.pyplot as plt
 import skimage.filters as skfilt
 from scipy import ndimage as ndi
-from tkinter.filedialog import askdirectory
 
 from densitymap import density_map
 from findmaxima import find_maxima
@@ -38,10 +38,10 @@ minpeakdist = 1  # minimum distance between peaks in pixels for peak detection -
 bandwidth_nm = 200  # bandwidth in nm for density map of peaks
 
 if allimgs:
-    files = glob.glob(os.path.join(dirpath,'*[0-9].tif'))
+    files = glob.glob(os.path.join(dirpath, '*[0-9].tif'))
     
 else:
-    files = [os.path.join(dirpath,'C-Cell002.tif')]
+    files = [os.path.join(dirpath, 'C-Cell002.tif')]
 
 print([path.replace(dirpath+'\\','') for path in files])
 
@@ -117,8 +117,8 @@ for filepath in files:
     # Save a dictionary with information about the analysis
     analysis_dict = {
     "Raw image max": int(imgraw.max()),
-    "Raw image mean (masked)": np.ma.masked_array(imgraw,~binarymap).mean(),
-    "Raw image std (masked)": np.ma.masked_array(imgraw,~binarymap).std(),
+    "Raw image mean (masked)": np.ma.masked_array(imgraw, ~binarymap).mean(),
+    "Raw image std (masked)": np.ma.masked_array(imgraw, ~binarymap).std(),
     "Number of peaks": len(coords_peaks),
     "KDE max": Z.max(),
     "KDE mean (masked)": np.ma.masked_array(Z,~binarymap).mean(),
